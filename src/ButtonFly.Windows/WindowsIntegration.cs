@@ -81,7 +81,6 @@ internal sealed class DesktopGestureRegistration : IDisposable
 {
     private const int WhMouseLl = 14;
     private const int WmLButtonUp = 0x0202;
-    private const int WmLButtonDblClk = 0x0203;
     private const int GaRoot = 2;
     private const int LvmHitTest = 0x1012;
     private const uint LvhtOnItem = 0x000E;
@@ -90,6 +89,9 @@ internal sealed class DesktopGestureRegistration : IDisposable
     private readonly IntPtr hook;
     private DesktopGesture gestures;
     private DateTime lastShown;
+    private DateTime lastClick;
+    private Point lastClickPoint;
+    private DesktopGesture lastDoubleGesture;
 
     public DesktopGestureRegistration(Action showLauncher)
     {
@@ -106,23 +108,30 @@ internal sealed class DesktopGestureRegistration : IDisposable
         if (code >= 0 && gestures != DesktopGesture.None && data != IntPtr.Zero)
         {
             int eventId = message.ToInt32();
-            if (eventId is WmLButtonUp or WmLButtonDblClk)
+            if (eventId == WmLButtonUp)
             {
                 var mouse = Marshal.PtrToStructure<MouseHookData>(data);
-                if ((mouse.Flags & 1) == 0 && IsDesktopBackground(mouse.Point) && Matches(eventId)) Show();
+                if ((mouse.Flags & 1) == 0 && IsDesktopBackground(mouse.Point)) MatchClick(mouse.Point);
             }
         }
         return CallNextHookEx(hook, code, message, data);
     }
 
-    private bool Matches(int eventId)
+    private void MatchClick(Point point)
     {
         bool shift = (GetAsyncKeyState(0x10) & 0x8000) != 0;
         bool ctrl = (GetAsyncKeyState(0x11) & 0x8000) != 0;
         bool alt = (GetAsyncKeyState(0x12) & 0x8000) != 0;
-        if (shift && !ctrl && !alt) return eventId == WmLButtonUp ? gestures.HasFlag(DesktopGesture.ShiftClick) : gestures.HasFlag(DesktopGesture.ShiftDoubleClick);
-        if (ctrl && !shift && !alt) return eventId == WmLButtonUp ? gestures.HasFlag(DesktopGesture.CtrlClick) : gestures.HasFlag(DesktopGesture.CtrlDoubleClick);
-        return !shift && !ctrl && !alt && eventId == WmLButtonDblClk && gestures.HasFlag(DesktopGesture.DoubleClick);
+        var (single, twice) = shift && !ctrl && !alt ? (DesktopGesture.ShiftClick, DesktopGesture.ShiftDoubleClick)
+            : ctrl && !shift && !alt ? (DesktopGesture.CtrlClick, DesktopGesture.CtrlDoubleClick)
+            : !shift && !ctrl && !alt ? (DesktopGesture.None, DesktopGesture.DoubleClick)
+            : (DesktopGesture.None, DesktopGesture.None);
+        var now = DateTime.UtcNow;
+        bool isDouble = twice != DesktopGesture.None && twice == lastDoubleGesture &&
+            (now - lastClick).TotalMilliseconds <= GetDoubleClickTime() &&
+            Math.Abs(point.X - lastClickPoint.X) <= GetSystemMetrics(36) && Math.Abs(point.Y - lastClickPoint.Y) <= GetSystemMetrics(37);
+        lastClick = now; lastClickPoint = point; lastDoubleGesture = twice;
+        if ((single != DesktopGesture.None && gestures.HasFlag(single)) || (isDouble && gestures.HasFlag(twice))) Show();
     }
 
     private void Show()
@@ -167,6 +176,8 @@ internal sealed class DesktopGestureRegistration : IDisposable
     [DllImport("user32.dll")] private static extern bool UnhookWindowsHookEx(IntPtr hook);
     [DllImport("user32.dll")] private static extern IntPtr CallNextHookEx(IntPtr hook, int code, IntPtr message, IntPtr data);
     [DllImport("user32.dll")] private static extern short GetAsyncKeyState(int key);
+    [DllImport("user32.dll")] private static extern uint GetDoubleClickTime();
+    [DllImport("user32.dll")] private static extern int GetSystemMetrics(int index);
     [DllImport("user32.dll")] private static extern IntPtr WindowFromPoint(Point point);
     [DllImport("user32.dll")] private static extern IntPtr GetParent(IntPtr window);
     [DllImport("user32.dll")] private static extern IntPtr GetAncestor(IntPtr window, int flags);
