@@ -83,6 +83,8 @@ internal sealed class DesktopGestureRegistration : IDisposable
     private const int WmLButtonUp = 0x0202;
     private const int WmLButtonDblClk = 0x0203;
     private const int GaRoot = 2;
+    private const int LvmHitTest = 0x1012;
+    private const uint LvhtOnItem = 0x000E;
     private readonly Action showLauncher;
     private readonly LowLevelMouseProc callback;
     private readonly IntPtr hook;
@@ -134,9 +136,19 @@ internal sealed class DesktopGestureRegistration : IDisposable
     {
         IntPtr target = WindowFromPoint(point);
         if (target == IntPtr.Zero) return false;
-        for (IntPtr current = target; current != IntPtr.Zero; current = GetParent(current))
-            if (ClassName(current) is "SysListView32" or "SHELLDLL_DefView") return false;
-        return ClassName(GetAncestor(target, GaRoot)) is "Progman" or "WorkerW";
+        if (ClassName(GetAncestor(target, GaRoot)) is not ("Progman" or "WorkerW")) return false;
+        IntPtr icons = FindAncestor(target, "SysListView32");
+        if (icons == IntPtr.Zero) return true;
+        var hit = new ListViewHitTest { Point = point };
+        if (!ScreenToClient(icons, ref hit.Point)) return false;
+        return SendMessage(icons, LvmHitTest, IntPtr.Zero, ref hit) < 0 || (hit.Flags & LvhtOnItem) == 0;
+    }
+
+    private static IntPtr FindAncestor(IntPtr window, string className)
+    {
+        for (IntPtr current = window; current != IntPtr.Zero; current = GetParent(current))
+            if (ClassName(current) == className) return current;
+        return IntPtr.Zero;
     }
 
     private static string ClassName(IntPtr window)
@@ -150,6 +162,7 @@ internal sealed class DesktopGestureRegistration : IDisposable
     private delegate IntPtr LowLevelMouseProc(int code, IntPtr message, IntPtr data);
     [StructLayout(LayoutKind.Sequential)] private struct Point { public int X, Y; }
     [StructLayout(LayoutKind.Sequential)] private struct MouseHookData { public Point Point; public uint MouseData, Flags, Time; public IntPtr ExtraInfo; }
+    [StructLayout(LayoutKind.Sequential)] private struct ListViewHitTest { public Point Point; public uint Flags; public int Item, SubItem, Group; }
     [DllImport("user32.dll", SetLastError = true)] private static extern IntPtr SetWindowsHookEx(int idHook, LowLevelMouseProc callback, IntPtr module, uint threadId);
     [DllImport("user32.dll")] private static extern bool UnhookWindowsHookEx(IntPtr hook);
     [DllImport("user32.dll")] private static extern IntPtr CallNextHookEx(IntPtr hook, int code, IntPtr message, IntPtr data);
@@ -157,6 +170,8 @@ internal sealed class DesktopGestureRegistration : IDisposable
     [DllImport("user32.dll")] private static extern IntPtr WindowFromPoint(Point point);
     [DllImport("user32.dll")] private static extern IntPtr GetParent(IntPtr window);
     [DllImport("user32.dll")] private static extern IntPtr GetAncestor(IntPtr window, int flags);
+    [DllImport("user32.dll")] private static extern bool ScreenToClient(IntPtr window, ref Point point);
+    [DllImport("user32.dll")] private static extern IntPtr SendMessage(IntPtr window, int message, IntPtr wParam, ref ListViewHitTest lParam);
     [DllImport("user32.dll", CharSet = CharSet.Unicode)] private static extern int GetClassName(IntPtr window, System.Text.StringBuilder name, int length);
     [DllImport("kernel32.dll", CharSet = CharSet.Unicode)] private static extern IntPtr GetModuleHandle(string? name);
 }
