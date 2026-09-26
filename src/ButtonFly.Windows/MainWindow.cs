@@ -32,6 +32,7 @@ public sealed class MainWindow : Window
     private string? hotkeyText;
     private string? initialWarning;
     private HotkeyRegistration? hotkey;
+    private DesktopGestureRegistration? desktopGestures;
     private OutputWindow? output;
     private EditorWindow? editor;
     private bool exiting;
@@ -82,7 +83,7 @@ public sealed class MainWindow : Window
         SourceInitialized += (_, _) =>
         {
             hotkey = new HotkeyRegistration(this, Toggle);
-            try { hotkey.Register(config.Preferences.Hotkey); hotkeyText = config.Preferences.Hotkey; }
+            try { hotkey.Register(config.Preferences.Hotkey); hotkeyText = config.Preferences.Hotkey; desktopGestures = new DesktopGestureRegistration(ShowLauncher); desktopGestures.Configure(config.Preferences.DesktopGestures); }
             catch (Exception e) { initialWarning = (initialWarning is null ? "" : initialWarning + "\n") + e.Message; }
         };
         Loaded += (_, _) =>
@@ -120,6 +121,7 @@ public sealed class MainWindow : Window
     private void ApplyConfiguration()
     {
         scene.SetConfiguration(config);
+        desktopGestures?.Configure(config.Preferences.DesktopGestures);
         classic.Background = config.Preferences.Theme == "classic" ? new SolidColorBrush(Color.FromRgb(108, 76, 156)) : Ui.Panel;
         modern.Background = config.Preferences.Theme == "modern" ? new SolidColorBrush(Color.FromRgb(64, 95, 145)) : Ui.Panel;
         status.Text = $"{config.Preferences.Hotkey}  Show/hide   ·   Arrow keys / Enter / Esc";
@@ -219,7 +221,7 @@ public sealed class MainWindow : Window
     private void OnClosing(object? sender, CancelEventArgs e)
     {
         if (!exiting) { e.Cancel = true; Hide(); return; }
-        watcher.Dispose(); reloadTimer.Stop(); hotkey?.Dispose(); tray.Visible = false; tray.Dispose();
+        watcher.Dispose(); reloadTimer.Stop(); hotkey?.Dispose(); desktopGestures?.Dispose(); tray.Visible = false; tray.Dispose();
         SystemEvents.DisplaySettingsChanged -= DisplayChanged;
         scene.Dispose(); launcher.Dispose(); output?.Close();
     }

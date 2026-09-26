@@ -7,6 +7,8 @@ public enum ActionKind { Executable, Open, Command }
 public enum CommandShell { Cmd, WindowsPowerShell, PowerShell7 }
 public enum OutputMode { Capture, Console }
 public enum IconKind { None, Application, File }
+[Flags]
+public enum DesktopGesture { None = 0, DoubleClick = 1, ShiftClick = 2, CtrlClick = 4, ShiftDoubleClick = 8, CtrlDoubleClick = 16 }
 
 public sealed class MenuIcon
 {
@@ -43,6 +45,7 @@ public sealed class Preferences
     public bool ReduceMotion { get; set; }
     public bool StartWithWindows { get; set; }
     public string Hotkey { get; set; } = "Ctrl+Alt+B";
+    public DesktopGesture DesktopGestures { get; set; } = DesktopGesture.DoubleClick;
     public double Width { get; set; } = 1000;
     public double Height { get; set; } = 740;
     public double? Left { get; set; }
@@ -100,6 +103,8 @@ public static class ConfigJson
         var p = config.Preferences;
         if (p.Theme is not ("classic" or "modern")) throw new InvalidDataException("The theme is invalid.");
         if (string.IsNullOrWhiteSpace(p.Hotkey)) throw new InvalidDataException("Enter a hotkey.");
+        if (((int)p.DesktopGestures & ~(int)(DesktopGesture.DoubleClick | DesktopGesture.ShiftClick | DesktopGesture.CtrlClick | DesktopGesture.ShiftDoubleClick | DesktopGesture.CtrlDoubleClick)) != 0)
+            throw new InvalidDataException("The desktop gesture settings are invalid.");
         if (!double.IsFinite(p.Width) || !double.IsFinite(p.Height) || p.Width < 640 || p.Height < 480 ||
             p.Left is double x && !double.IsFinite(x) || p.Top is double y && !double.IsFinite(y))
             throw new InvalidDataException("The window position or size is invalid.");
