@@ -32,11 +32,6 @@ internal sealed class EditorWindow : Window
     private readonly ComboBox encoding = new() { ItemsSource = new[] { "UTF-8", "CP932 (Japanese Windows commands)" } };
     private readonly CheckBox reduced = new() { Content = "Reduce motion" };
     private readonly CheckBox startup = new() { Content = "Start when I sign in to Windows" };
-    private readonly CheckBox desktopDoubleClick = new() { Content = "Double-click desktop background" };
-    private readonly CheckBox desktopShiftClick = new() { Content = "Shift+click desktop background" };
-    private readonly CheckBox desktopCtrlClick = new() { Content = "Ctrl+click desktop background" };
-    private readonly CheckBox desktopShiftDoubleClick = new() { Content = "Shift+double-click desktop background" };
-    private readonly CheckBox desktopCtrlDoubleClick = new() { Content = "Ctrl+double-click desktop background" };
     private readonly TextBox hotkey = new();
     private readonly StackPanel actionFields = new();
     private readonly StackPanel commandFields = new();
@@ -122,12 +117,11 @@ internal sealed class EditorWindow : Window
         Closed += (_, _) => iconTimer.Stop();
         form.Children.Add(new Separator { Margin = new Thickness(0, 8, 0, 8) });
         form.Children.Add(Ui.Text("Application settings", 19));
-        form.Children.Add(reduced); form.Children.Add(startup); Row("Show/hide hotkey", hotkey);
-        form.Children.Add(Ui.Text("Show launcher from desktop", 14));
-        form.Children.Add(desktopDoubleClick); form.Children.Add(desktopShiftClick); form.Children.Add(desktopCtrlClick);
-        form.Children.Add(desktopShiftDoubleClick); form.Children.Add(desktopCtrlDoubleClick);
+        form.Children.Add(reduced); form.Children.Add(startup); Row("Global show/hide shortcut", hotkey);
+        var hotkeyHint = Ui.Text("Use Ctrl+Alt+B by default. Changes take effect after saving.", 12, Ui.Muted);
+        hotkeyHint.Margin = new Thickness(148, 0, 0, 4);
+        form.Children.Add(hotkeyHint);
         reduced.IsChecked = draft.Preferences.ReduceMotion; startup.IsChecked = draft.Preferences.StartWithWindows; hotkey.Text = draft.Preferences.Hotkey;
-        SetDesktopGestureChecks(draft.Preferences.DesktopGestures);
         current = draft.Items.FirstOrDefault(); RefreshTree(current?.Id); LoadForm();
     }
     private void UpdateFields()
@@ -153,24 +147,6 @@ internal sealed class EditorWindow : Window
         loadingForm = false; UpdateFields(); iconTimer.Stop(); UpdateIconPreview();
     }
     private MenuIcon FormIcon() => new() { Kind = (IconKind)Math.Max(0, iconKind.SelectedIndex), Path = iconPath.Text.Trim() };
-    private DesktopGesture SelectedDesktopGestures()
-    {
-        DesktopGesture result = DesktopGesture.None;
-        if (desktopDoubleClick.IsChecked == true) result |= DesktopGesture.DoubleClick;
-        if (desktopShiftClick.IsChecked == true) result |= DesktopGesture.ShiftClick;
-        if (desktopCtrlClick.IsChecked == true) result |= DesktopGesture.CtrlClick;
-        if (desktopShiftDoubleClick.IsChecked == true) result |= DesktopGesture.ShiftDoubleClick;
-        if (desktopCtrlDoubleClick.IsChecked == true) result |= DesktopGesture.CtrlDoubleClick;
-        return result;
-    }
-    private void SetDesktopGestureChecks(DesktopGesture value)
-    {
-        desktopDoubleClick.IsChecked = value.HasFlag(DesktopGesture.DoubleClick);
-        desktopShiftClick.IsChecked = value.HasFlag(DesktopGesture.ShiftClick);
-        desktopCtrlClick.IsChecked = value.HasFlag(DesktopGesture.CtrlClick);
-        desktopShiftDoubleClick.IsChecked = value.HasFlag(DesktopGesture.ShiftDoubleClick);
-        desktopCtrlDoubleClick.IsChecked = value.HasFlag(DesktopGesture.CtrlDoubleClick);
-    }
     private void QueueIconPreview()
     {
         if (loadingForm) return;
@@ -314,7 +290,7 @@ internal sealed class EditorWindow : Window
     {
         try
         {
-            ApplyForm(); draft.Preferences.ReduceMotion = reduced.IsChecked == true; draft.Preferences.StartWithWindows = startup.IsChecked == true; draft.Preferences.Hotkey = hotkey.Text.Trim(); draft.Preferences.DesktopGestures = SelectedDesktopGestures();
+            ApplyForm(); draft.Preferences.ReduceMotion = reduced.IsChecked == true; draft.Preferences.StartWithWindows = startup.IsChecked == true; draft.Preferences.Hotkey = hotkey.Text.Trim(); draft.Preferences.DesktopGestures = DesktopGesture.None;
             ConfigJson.Validate(draft); save(draft); DialogResult = true;
         }
         catch (Exception e) { Ui.Error(this, e); }

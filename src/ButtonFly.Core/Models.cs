@@ -45,7 +45,9 @@ public sealed class Preferences
     public bool ReduceMotion { get; set; }
     public bool StartWithWindows { get; set; }
     public string Hotkey { get; set; } = "Ctrl+Alt+B";
-    public DesktopGesture DesktopGestures { get; set; } = DesktopGesture.DoubleClick;
+    // Retained only to read settings written by earlier versions. Desktop gestures are no longer used.
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public DesktopGesture DesktopGestures { get; set; }
     public double Width { get; set; } = 1000;
     public double Height { get; set; } = 740;
     public double? Left { get; set; }
@@ -103,8 +105,6 @@ public static class ConfigJson
         var p = config.Preferences;
         if (p.Theme is not ("classic" or "modern")) throw new InvalidDataException("The theme is invalid.");
         if (string.IsNullOrWhiteSpace(p.Hotkey)) throw new InvalidDataException("Enter a hotkey.");
-        if (((int)p.DesktopGestures & ~(int)(DesktopGesture.DoubleClick | DesktopGesture.ShiftClick | DesktopGesture.CtrlClick | DesktopGesture.ShiftDoubleClick | DesktopGesture.CtrlDoubleClick)) != 0)
-            throw new InvalidDataException("The desktop gesture settings are invalid.");
         if (!double.IsFinite(p.Width) || !double.IsFinite(p.Height) || p.Width < 640 || p.Height < 480 ||
             p.Left is double x && !double.IsFinite(x) || p.Top is double y && !double.IsFinite(y))
             throw new InvalidDataException("The window position or size is invalid.");
