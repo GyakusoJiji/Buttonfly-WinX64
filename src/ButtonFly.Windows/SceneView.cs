@@ -161,7 +161,7 @@ public sealed class SceneView : Grid, IDisposable
             double px = double.IsInfinity(dc) ? bw + 0.135 : (bw + 0.135) / dc;
             double py = double.IsInfinity(dr) ? bh + 0.135 : (bh + 0.135) / dr;
             foreach (var p in pairs) if (p.R > 0 && p.C * px < bw + 0.135 - 1e-6) py = Math.Max(py, (bh + 0.135) / p.R);
-            px = (px + bw + 0.27) / 2; py = (py + bh + 0.27) / 2;
+            px = (px + bw + 0.27) / 2 * 1.15; py = (py + bh + 0.27) / 2;
             double cols = dice.Max(p => p[0]) - dice.Min(p => p[0]), rows = dice.Max(p => p[1]) - dice.Min(p => p[1]);
             double s = Math.Max(0.01, Math.Min(1, Math.Min(aw / (cols * px + bw), ah / (rows * py + bh))));
             double mx = (dice.Max(p => p[0]) + dice.Min(p => p[0])) / 2d, my = (dice.Max(p => p[1]) + dice.Min(p => p[1])) / 2d;
@@ -365,7 +365,6 @@ internal sealed class ButtonVisual
     private readonly TranslateTransform3D translate = new(), innerMove = new();
     private readonly AxisAngleRotation3D innerX = new(new Vector3D(1, 0, 0), 0), innerY = new(new Vector3D(0, 1, 0), 0);
     private readonly GeometryModel3D back;
-    private readonly List<MaterialGroup> bezelMaterials = [];
     private readonly SolidColorBrush glow = new(Colors.Transparent);
     private readonly bool modern;
     private readonly int index;
@@ -394,12 +393,14 @@ internal sealed class ButtonVisual
         else
         {
             var panelColor = ScaleColor(color, 0.58);
-            double[] brightness = [1.30, 0.85, 0.70, 1.15];
+            // Bottom, right, top, left: sampled from the reference bezel (94,50,94) / (109,60,110) / (169,111,164) / (154,94,149).
+            double[] brightness = [1.03, 1.20, 1.84, 1.67];
             foreach (var (mesh, factor) in slab.Zip(brightness))
             {
+                // Emission alone is additive in WPF, so the bezel would blend with whatever is behind it.
                 var material = new MaterialGroup();
+                material.Children.Add(new DiffuseMaterial(Brushes.Black));
                 material.Children.Add(new EmissiveMaterial(new SolidColorBrush(ScaleColor(panelColor, factor))));
-                bezelMaterials.Add(material);
                 var body = new GeometryModel3D(mesh, material) { BackMaterial = material };
                 group.Children.Add(body); HitModels.Add(body);
             }
@@ -407,7 +408,11 @@ internal sealed class ButtonVisual
         double z = depth / 2 + bevel + 0.004;
         var root = new Model3DGroup();
         var texture = FaceTexture(item.Name, color, modern, MenuIcons.Load(item));
-        var frontMat = new MaterialGroup(); frontMat.Children.Add(new DiffuseMaterial(new ImageBrush(texture))); frontMat.Children.Add(new SpecularMaterial(new SolidColorBrush(Color.FromRgb(90, 90, 105)), modern ? 90 : 12)); frontMat.Children.Add(new EmissiveMaterial(glow));
+        var frontMat = new MaterialGroup();
+        if (modern) { frontMat.Children.Add(new DiffuseMaterial(new ImageBrush(texture))); frontMat.Children.Add(new SpecularMaterial(new SolidColorBrush(Color.FromRgb(90, 90, 105)), 90)); }
+        // Classic faces are unlit so they keep the exact texture color, like the bezel.
+        else { frontMat.Children.Add(new DiffuseMaterial(Brushes.Black)); frontMat.Children.Add(new EmissiveMaterial(new ImageBrush(texture))); }
+        frontMat.Children.Add(new EmissiveMaterial(glow));
         var front = new GeometryModel3D(Plane(bw - 2 * bevel, bh - 2 * bevel, z, false, modern), frontMat);
         back = new GeometryModel3D(Plane(bw, bh, z, true, modern), frontMat);
         group.Children.Add(front); group.Children.Add(back); HitModels.Add(front); HitModels.Add(back);
@@ -425,10 +430,6 @@ internal sealed class ButtonVisual
     }
     public void SetBackImage(BitmapSource bitmap)
     {
-        // Emission alone leaves the bezel transparent in WPF. Give the rotating
-        // slab an opaque base without changing its existing face colors.
-        foreach (var bezel in bezelMaterials)
-            if (bezel.Children.Count == 1) bezel.Children.Insert(0, new DiffuseMaterial(Brushes.Black));
         // Emissive-only preserves the snapshot's colors independently of scene lighting.
         var material = new MaterialGroup();
         material.Children.Add(new DiffuseMaterial(Brushes.Black));
@@ -481,9 +482,11 @@ internal sealed class ButtonVisual
         int h = modern ? 352 : 556;
         var visual = new DrawingVisual();
         Color Shade(double k) => Color.FromRgb((byte)Math.Min(255, color.R * k), (byte)Math.Min(255, color.G * k), (byte)Math.Min(255, color.B * k));
+        // Muted face matching the reference: (158,87,153) -> (111,91,110).
+        Color Face() => Color.FromRgb((byte)(color.R * 0.28 + 67), (byte)(color.G * 0.28 + 67), (byte)(color.B * 0.28 + 67));
         using (var dc = visual.RenderOpen())
         {
-            Brush background = modern ? new LinearGradientBrush(Shade(1.25), Shade(0.6), 90) : new SolidColorBrush(Shade(0.58));
+            Brush background = modern ? new LinearGradientBrush(Shade(1.25), Shade(0.6), 90) : new SolidColorBrush(Face());
             dc.DrawRectangle(background, null, new Rect(0, 0, w, h));
             if (modern) dc.DrawRectangle(null, new Pen(new SolidColorBrush(Color.FromArgb(140, 0, 0, 0)), 5), new Rect(3, 3, w - 6, h - 6));
             double textLeft = w * 0.07, textWidth = w * 0.86;
